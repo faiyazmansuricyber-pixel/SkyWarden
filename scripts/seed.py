@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -12,6 +13,7 @@ from dotenv import load_dotenv
 
 from target_app.db import (
     DEFAULT_DB_PATH,
+    DEFAULT_FIX_FLAGS,
     PASSWORD_HASH_ITERATIONS,
     connect_db,
     initialize_database,
@@ -161,7 +163,8 @@ def seed_database(
             ):
                 connection.execute(f"DELETE FROM {table}")
             connection.execute(
-                "UPDATE release_flags SET release_version = 'v3.0', flags_json = '{}' WHERE id = 1"
+                "UPDATE release_flags SET release_version = 'v3.0', flags_json = ? WHERE id = 1",
+                (json.dumps(DEFAULT_FIX_FLAGS, sort_keys=True),),
             )
         elif connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
             raise RuntimeError("Database is already seeded; use scripts.reset to reseed it.")

@@ -8,6 +8,17 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT_DIR / "data" / "skyvoyage.sqlite3"
 PASSWORD_HASH_ITERATIONS = 600_000
+FIX_FLAG_NAMES = (
+    "FIX_B1",
+    "FIX_B2",
+    "FIX_B3",
+    "FIX_B4",
+    "FIX_B5",
+    "FIX_Z1",
+    "FIX_Z2",
+    "FIX_S1",
+)
+DEFAULT_FIX_FLAGS = {name: False for name in FIX_FLAG_NAMES}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agencies (
@@ -48,7 +59,7 @@ CREATE TABLE IF NOT EXISTS holds (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     flight_id TEXT NOT NULL REFERENCES flights(id),
-    quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 9),
+    quantity INTEGER NOT NULL CHECK (quantity BETWEEN -9 AND 9 AND quantity != 0),
     status TEXT NOT NULL CHECK (status IN ('active', 'used')),
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
@@ -100,9 +111,70 @@ def initialize_database(db_path: Path = DEFAULT_DB_PATH) -> None:
         connection.execute(
             """
             INSERT OR IGNORE INTO release_flags (id, release_version, flags_json)
-            VALUES (1, 'v3.0', '{}')
+            VALUES (1, 'v3.0', ?)
+            """,
+            (json.dumps(DEFAULT_FIX_FLAGS, sort_keys=True),),
+        )
+        _migrate_signed_holds(connection)
+        row = connection.execute(
+            "SELECT flags_json FROM release_flags WHERE id = 1"
+        ).fetchone()
+        flags = json.loads(row["flags_json"])
+        if not isinstance(flags, dict) or any(
+            not isinstance(name, str) or not isinstance(enabled, bool)
+            for name, enabled in flags.items()
+        ):
+            raise ValueError("The SkyVoyage release flags must be a JSON object of booleans.")
+        merged_flags = {**DEFAULT_FIX_FLAGS, **flags}
+        if merged_flags != flags:
+            connection.execute(
+                "UPDATE release_flags SET flags_json = ? WHERE id = 1",
+                (json.dumps(merged_flags, sort_keys=True),),
+            )
+
+
+def _migrate_signed_holds(connection: sqlite3.Connection) -> None:
+    schema = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'holds'"
+    ).fetchone()
+    if schema is None or "BETWEEN 1 AND 9" not in schema["sql"]:
+        return
+
+    connection.commit()
+    connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE holds_m1b (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                flight_id TEXT NOT NULL REFERENCES flights(id),
+                quantity INTEGER NOT NULL CHECK (quantity BETWEEN -9 AND 9 AND quantity != 0),
+                status TEXT NOT NULL CHECK (status IN ('active', 'used')),
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
             """
         )
+        connection.execute(
+            """
+            INSERT INTO holds_m1b (id, user_id, flight_id, quantity, status, created_at, expires_at)
+            SELECT id, user_id, flight_id, quantity, status, created_at, expires_at
+            FROM holds
+            """
+        )
+        connection.execute("DROP TABLE holds")
+        connection.execute("ALTER TABLE holds_m1b RENAME TO holds")
+        connection.execute(
+            "CREATE INDEX holds_flight_expiry_idx ON holds (flight_id, status, expires_at)"
+        )
+        connection.commit()
+    except sqlite3.Error:
+        connection.rollback()
+        raise
+    finally:
+        connection.execute("PRAGMA foreign_keys = ON")
 
 
 def read_release_flags(db_path: Path = DEFAULT_DB_PATH) -> tuple[str, dict[str, bool]]:
@@ -121,4 +193,4 @@ def read_release_flags(db_path: Path = DEFAULT_DB_PATH) -> tuple[str, dict[str, 
     ):
         raise ValueError("The SkyVoyage release flags must be a JSON object of booleans.")
 
-    return row["release_version"], flags
+    return row["release_version"], {**DEFAULT_FIX_FLAGS, **flags}

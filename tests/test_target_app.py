@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,19 @@ def login(api: TestClient, username: str, password: str) -> str:
 
 def booking_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def enable_fix(api: TestClient, flag: str) -> None:
+    with connect_db(api.app.state.db_path) as connection:
+        row = connection.execute(
+            "SELECT flags_json FROM release_flags WHERE id = 1"
+        ).fetchone()
+        flags = json.loads(row["flags_json"])
+        flags[flag] = True
+        connection.execute(
+            "UPDATE release_flags SET flags_json = ? WHERE id = 1",
+            (json.dumps(flags, sort_keys=True),),
+        )
 
 
 def test_login_returns_bearer_token_and_protected_routes_require_it(api: TestClient) -> None:
@@ -89,6 +103,7 @@ def test_booking_price_is_calculated_from_flight_data(api: TestClient) -> None:
 
 
 def test_booking_can_be_cancelled_only_once(api: TestClient) -> None:
+    enable_fix(api, "FIX_B3")
     token = login(api, "agent_a", TEST_PASSWORDS["TEST_AGENT_A_PASSWORD"])
     headers = booking_headers(token)
     paid = api.post("/api/v3/bookings/agency_a-booking-002/pay", headers=headers)
@@ -128,6 +143,7 @@ def test_subagent_is_scoped_to_own_bookings_and_cannot_pay(api: TestClient) -> N
 
 
 def test_profile_update_cannot_change_role(api: TestClient) -> None:
+    enable_fix(api, "FIX_B5")
     token = login(api, "agent_a", TEST_PASSWORDS["TEST_AGENT_A_PASSWORD"])
     response = api.patch(
         "/api/v3/users/me",

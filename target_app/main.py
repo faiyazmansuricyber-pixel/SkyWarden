@@ -7,11 +7,12 @@ import secrets
 import sqlite3
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,7 +44,7 @@ class LoginRequest(StrictModel):
 
 class HoldRequest(StrictModel):
     flight_id: str = Field(min_length=1, max_length=32)
-    quantity: int = Field(ge=1, le=9)
+    quantity: int = Field(ge=-9, le=9)
 
 
 class BookingRequest(HoldRequest):
@@ -53,12 +54,14 @@ class BookingRequest(HoldRequest):
     )
     passport_number: str = Field(pattern=r"^X\d{7}$")
     hold_id: str | None = Field(default=None, min_length=1, max_length=36)
+    total_price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
 
 
 class ProfileUpdate(StrictModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=100)
     email: str | None = Field(default=None, max_length=254)
     phone: str | None = Field(default=None, max_length=32)
+    role: Literal["admin", "agent", "subagent"] | None = None
 
 
 def _token_digest(token: str) -> str:
@@ -234,8 +237,14 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/app.js", include_in_schema=False)
-    def portal_script() -> FileResponse:
-        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript")
+    def portal_script(request: Request) -> Response:
+        contents = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        if request.state.flags["FIX_S1"]:
+            contents = contents.replace(
+                'const mobileFaresRoute = null;',
+                'const mobileFaresRoute = "/api/m/v2/fares";',
+            )
+        return Response(content=contents, media_type="text/javascript")
 
     @app.post("/api/v3/auth/login")
     def login(payload: LoginRequest, response: Response) -> dict[str, str]:
@@ -303,8 +312,14 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
 
     @app.post("/api/v3/holds", status_code=201)
     def create_hold(
-        payload: HoldRequest, user: sqlite3.Row = user_dependency
+        payload: HoldRequest,
+        request: Request,
+        user: sqlite3.Row = user_dependency,
     ) -> dict[str, Any]:
+        if payload.quantity == 0 or (
+            payload.quantity < 0 and request.state.flags["FIX_B4"]
+        ):
+            raise HTTPException(status_code=422, detail="Quantity must be between 1 and 9.")
         now = int(time.time())
         hold_id = str(uuid4())
         with connect_db(app.state.db_path) as connection:
@@ -340,8 +355,12 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
 
     @app.post("/api/v3/bookings", status_code=201)
     def create_booking(
-        payload: BookingRequest, user: sqlite3.Row = user_dependency
+        payload: BookingRequest,
+        request: Request,
+        user: sqlite3.Row = user_dependency,
     ) -> dict[str, Any]:
+        if payload.quantity < 1:
+            raise HTTPException(status_code=422, detail="Quantity must be between 1 and 9.")
         now = int(time.time())
         booking_id = str(uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
@@ -369,7 +388,10 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
                     raise HTTPException(status_code=409, detail="The hold is invalid or expired.")
 
             _ensure_capacity(connection, flight, payload.quantity, payload.hold_id)
-            total_price_cents = flight["base_fare_cents"] * payload.quantity
+            server_price_cents = flight["base_fare_cents"] * payload.quantity
+            total_price_cents = server_price_cents
+            if not request.state.flags["FIX_B2"] and payload.total_price is not None:
+                total_price_cents = int(payload.total_price * 100)
             connection.execute(
                 """
                 INSERT INTO bookings (
@@ -411,6 +433,38 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
             raise HTTPException(status_code=404, detail="Booking not found.")
         return _booking_payload(row)
 
+    @app.get("/api/v3/bookings/{booking_id}/invoice")
+    def get_invoice(
+        booking_id: str,
+        request: Request,
+        user: sqlite3.Row = user_dependency,
+    ) -> dict[str, Any]:
+        if request.state.release_version != "v3.1":
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+        with connect_db(app.state.db_path) as connection:
+            if request.state.flags["FIX_B1"]:
+                row = _get_visible_booking(connection, booking_id, user)
+            else:
+                row = connection.execute(
+                    """
+                    SELECT b.*, f.currency
+                    FROM bookings AS b
+                    JOIN flights AS f ON f.id = b.flight_id
+                    WHERE b.id = ?
+                    """,
+                    (booking_id,),
+                ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+        return {
+            "booking_id": row["id"],
+            "agency_id": row["agency_id"],
+            "traveler_name": row["traveler_name"],
+            "total_price_cents": row["total_price_cents"],
+            "currency": row["currency"],
+        }
+
     @app.post("/api/v3/bookings/{booking_id}/pay")
     def pay_booking(
         booking_id: str, user: sqlite3.Row = user_dependency
@@ -433,7 +487,9 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
 
     @app.post("/api/v3/bookings/{booking_id}/cancel")
     def cancel_booking(
-        booking_id: str, user: sqlite3.Row = user_dependency
+        booking_id: str,
+        request: Request,
+        user: sqlite3.Row = user_dependency,
     ) -> dict[str, Any]:
         _require_roles(user, "admin", "agent")
         with connect_db(app.state.db_path) as connection:
@@ -441,8 +497,21 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
             row = _get_visible_booking(connection, booking_id, user)
             if row is None:
                 raise HTTPException(status_code=404, detail="Booking not found.")
-            if row["status"] == "cancelled":
+            if row["status"] == "cancelled" and request.state.flags["FIX_B3"]:
                 raise HTTPException(status_code=409, detail="Booking is already cancelled.")
+            if row["status"] == "cancelled":
+                if row["refund_amount_cents"] > 0:
+                    connection.execute(
+                        """
+                        UPDATE bookings
+                        SET refund_amount_cents = refund_amount_cents + total_price_cents
+                        WHERE id = ?
+                        """,
+                        (booking_id,),
+                    )
+                updated = _get_visible_booking(connection, booking_id, user)
+                assert updated is not None
+                return _booking_payload(updated)
             connection.execute(
                 """
                 UPDATE bookings
@@ -465,10 +534,16 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
 
     @app.patch("/api/v3/users/me")
     def update_profile(
-        update: ProfileUpdate, user: sqlite3.Row = user_dependency
+        update: ProfileUpdate,
+        request: Request,
+        user: sqlite3.Row = user_dependency,
     ) -> dict[str, Any]:
         values = _validate_profile_update(update)
-        allowed_columns = {"display_name", "email", "phone"}
+        if "role" in values and (
+            request.state.flags["FIX_B5"] or values["role"] is None
+        ):
+            raise HTTPException(status_code=422, detail="Role cannot be updated.")
+        allowed_columns = {"display_name", "email", "phone", "role"}
         if not set(values).issubset(allowed_columns):
             raise HTTPException(status_code=422, detail="Unsupported profile field.")
         assignments = ", ".join(f"{column} = ?" for column in values)
@@ -482,6 +557,58 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
             ).fetchone()
         assert updated is not None
         return {"user": _account_payload(updated)}
+
+    @app.get("/api/v1/bookings/{booking_id}")
+    def legacy_booking(booking_id: str, request: Request) -> dict[str, Any]:
+        if request.state.flags["FIX_Z1"]:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        with connect_db(app.state.db_path) as connection:
+            row = connection.execute(
+                "SELECT id, passport_number FROM bookings WHERE id = ?",
+                (booking_id,),
+            ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        return {"id": row["id"], "passport_number": row["passport_number"]}
+
+    @app.get("/api/v3/debug/config")
+    def debug_config(
+        request: Request, user: sqlite3.Row = user_dependency
+    ) -> dict[str, Any]:
+        del user
+        if request.state.flags["FIX_Z2"]:
+            raise HTTPException(status_code=404, detail="Not found.")
+        return {
+            "debug": True,
+            "service": "SkyVoyage synthetic test app",
+            "example_setting": "FAKE_ONLY_NOT_A_SECRET",
+        }
+
+    @app.get("/api/m/v2/fares")
+    def mobile_fares(
+        request: Request,
+        user_agent: Annotated[str | None, Header()] = None,
+        user: sqlite3.Row = user_dependency,
+    ) -> dict[str, Any]:
+        del user
+        if user_agent is None or not re.search(
+            r"iphone|ipad|ipod|android|mobile", user_agent, re.IGNORECASE
+        ):
+            raise HTTPException(status_code=404, detail="Fare route not found.")
+        with connect_db(app.state.db_path) as connection:
+            flights = connection.execute(
+                "SELECT id, base_fare_cents, currency FROM flights ORDER BY id"
+            ).fetchall()
+        return {
+            "fares": [
+                {
+                    "flight_id": flight["id"],
+                    "fare_cents": flight["base_fare_cents"],
+                    "currency": flight["currency"],
+                }
+                for flight in flights
+            ]
+        }
 
     @app.exception_handler(sqlite3.IntegrityError)
     async def database_constraint_error(
