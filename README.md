@@ -41,3 +41,7 @@ synthetic vulnerability ground truth.
 
 Run the app tests with `python -m pytest`. Reseed the local database with
 `python -m scripts.reset`. Never commit `.env` or generated `data/`.
+
+Generate the synthetic 90-day access log with about 50,000 records using
+`python -m traffic.generate_logs`; it writes the ignored file
+`data/access_logs.jsonl`.
