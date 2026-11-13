@@ -88,7 +88,10 @@ def test_endpoint_rate_limit_blocks_the_third_request(
     tmp_path: Path, vault: Vault
 ) -> None:
     gate, client = create_gate(
-        tmp_path, vault, lambda request: httpx.Response(200), endpoint_rate=2.0
+        tmp_path,
+        vault,
+        lambda request: httpx.Response(200, request=request),
+        endpoint_rate=2.0,
     )
     try:
         for _ in range(2):
@@ -104,16 +107,18 @@ def test_r2_requires_approval_and_reuses_one_plan_approval(
 ) -> None:
     calls = []
     answers = []
+    messages = []
 
-    def approve_prompt(_prompt: str) -> str:
-        answers.append(True)
+    def approve_prompt(prompt: str) -> str:
+        answers.append(prompt)
         return "approve"
 
     gate, client = create_gate(
         tmp_path,
         vault,
-        lambda request: calls.append(request) or httpx.Response(200),
-        approval_provider=CliApprovalProvider(approve_prompt, lambda _message: None),
+        lambda request: calls.append(request)
+        or httpx.Response(200, request=request),
+        approval_provider=CliApprovalProvider(approve_prompt, messages.append),
     )
     context = {
         "account": "agent_a",
@@ -126,12 +131,14 @@ def test_r2_requires_approval_and_reuses_one_plan_approval(
         for _ in range(2):
             gate.send(authenticated_request(vault, "POST", request_path), RiskClass.R2, context)
         assert len(calls) == 2
-        assert len(answers) == 1
+        assert answers == ["Approve this financial test? Type 'approve': "]
+        assert messages == ["R2 approval required for plan plan-refund-test."]
 
         denied_gate, denied_client = create_gate(
             tmp_path,
             vault,
-            lambda request: calls.append(request) or httpx.Response(200),
+            lambda request: calls.append(request)
+            or httpx.Response(200, request=request),
         )
         try:
             with pytest.raises(Blocked, match="human approval"):
@@ -152,7 +159,7 @@ def test_health_monitor_pauses_after_twenty_responses(tmp_path: Path, vault: Vau
     gate, client = create_gate(
         tmp_path,
         vault,
-        lambda request: httpx.Response(503),
+        lambda request: httpx.Response(503, request=request),
         health_monitor=monitor,
     )
     try:
@@ -178,7 +185,11 @@ def test_health_monitor_pauses_when_p95_exceeds_three_times_baseline() -> None:
 def test_audit_log_never_persists_login_secrets(tmp_path: Path, vault: Vault) -> None:
     def login_response(request: httpx.Request) -> httpx.Response:
         assert json.loads(request.content)["password"] == "synthetic-password"
-        return httpx.Response(200, json={"access_token": "private-synthetic-token"})
+        return httpx.Response(
+            200,
+            json={"access_token": "private-synthetic-token"},
+            headers={"Set-Cookie": "private-synthetic-cookie=secret"},
+        )
 
     gate, client = create_gate(tmp_path, vault, login_response)
     try:
@@ -194,6 +205,7 @@ def test_audit_log_never_persists_login_secrets(tmp_path: Path, vault: Vault) ->
             "synthetic-password",
             "private-synthetic-token",
             "private-synthetic-key",
+            "private-synthetic-cookie",
         ):
             assert secret not in audit_text
         assert "[REDACTED]" in audit_text

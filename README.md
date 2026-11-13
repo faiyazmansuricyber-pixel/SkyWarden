@@ -45,3 +45,9 @@ Run the app tests with `python -m pytest`. Reseed the local database with
 Generate the synthetic 90-day access log with about 50,000 records using
 `python -m traffic.generate_logs`; it writes the ignored file
 `data/access_logs.jsonl`.
+
+Install the Playwright browser once with `python -m playwright install chromium`.
+With the SkyVoyage app running on `127.0.0.1:8001` and the access log generated,
+run `python -m scripts.recon` to crawl the seeded roles, probe the bounded local
+route patterns through the safety gate, and write the inventory database,
+redacted HAR files, and `data/openapi.json`.

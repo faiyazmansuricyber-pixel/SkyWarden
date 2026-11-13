@@ -1,0 +1,13 @@
+"/api/v3/auth/": Identity team
+"/api/v3/search/": Travel API team
+"/api/v3/holds": Booking platform team
+"/api/v3/bookings": Booking platform team
+"/api/v3/users/": Account platform team
+"/api/v1/": Legacy platform team
+"/api/old/": Legacy platform team
+"/api/internal/": Platform engineering
+"/api/test/": Platform engineering
+"/api/beta/": Platform engineering
+"/api/debug/": Platform engineering
+"/api/v3/debug/": Platform engineering
+"/api/m/v2/fares": Mobile platform team

@@ -22,7 +22,16 @@ from engine.safety.vault import ROOT_DIR, Vault, VaultAccount
 ALLOWED_HOST = "127.0.0.1"
 ALLOWED_PORT = 8001
 LOGIN_PATH = "/api/v3/auth/login"
-ALLOWED_API_PREFIXES = ("/api/v3/", "/api/v1/", "/api/m/v2/")
+ALLOWED_API_PREFIXES = (
+    "/api/v3/",
+    "/api/v1/",
+    "/api/m/v2/",
+    "/api/old/",
+    "/api/internal/",
+    "/api/test/",
+    "/api/beta/",
+    "/api/debug/",
+)
 HASHED_BUNDLE_PATTERN = re.compile(r"/app\.[0-9a-f]{12}\.js\Z")
 
 
@@ -244,6 +253,7 @@ class SafetyGate:
         reason: str,
         status_code: int | None = None,
         duration_ms: float | None = None,
+        response_headers: Mapping[str, str] | None = None,
     ) -> None:
         account = context.get("account")
         plan_id = context.get("plan_id")
@@ -258,6 +268,7 @@ class SafetyGate:
                 "plan_id": plan_id if isinstance(plan_id, str) else None,
                 "justification_present": bool(context.get("justification")),
                 "headers": redact_headers(dict(request.headers)),
+                "response_headers": redact_headers(response_headers or {}),
                 "status_code": status_code,
                 "duration_ms": duration_ms,
             }
@@ -272,8 +283,11 @@ class SafetyGate:
         self._check_scope(request, risk, context)
         account = self._check_credentials(request, context)
 
-        endpoint = context.get("endpoint")
-        endpoint_key = endpoint if isinstance(endpoint, str) and endpoint else request.url.path
+        endpoint_key = re.sub(
+            r"(?<=/bookings/)[^/]+",
+            "{id}",
+            request.url.path,
+        )
         try:
             self.rate_limiter.check(f"{request.method.upper()}:{endpoint_key}")
         except RateLimitExceeded as error:
@@ -310,6 +324,7 @@ class SafetyGate:
             reason="Request passed the safety gate.",
             status_code=response.status_code,
             duration_ms=duration_ms,
+            response_headers=dict(response.headers),
         )
         if request.url.path == LOGIN_PATH and 200 <= response.status_code < 300:
             try:
