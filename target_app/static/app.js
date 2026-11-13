@@ -2,10 +2,12 @@
 
 (() => {
   let accessToken = "";
-  const mobileFaresRoute = null;
+  const mobileFaresRoute = __MOBILE_FARES_ROUTE__;
+  const invoiceRoute = __INVOICE_ROUTE__;
   const output = document.getElementById("output");
   const value = (id) => document.getElementById(id).value.trim();
   void mobileFaresRoute;
+  void invoiceRoute;
 
   async function request(path, options = {}) {
     const headers = new Headers(options.headers || {});

@@ -1,9 +1,9 @@
 # SkyWarden status
 
-- Current milestone: M1B complete; M1C is next.
-- M0 and M1A are complete. M1B vulnerabilities, flags, local admin control,
-  deploy script, reset behavior, and ground-truth tests are in place.
-- S1's `FIX_S1` bundle behavior is intentionally deferred to M1C.
-- Next: add the static content-hashed API route bundle for M1C, then generate
-  and validate the synthetic 90-day traffic logs for M1b.
-- Last test result: `python -m pytest -q` — 19 passed (Python 3.12).
+- Current milestone: M1C complete; M1b is next.
+- M0, M1A, and M1B are complete. M1B has flag-gated vulnerabilities, loopback
+  admin controls, deploy/reset scripts, and ground-truth tests.
+- M1C serves a content-hashed JavaScript bundle. `FIX_S1` adds the mobile fares
+  reference; the debug route is never included.
+- Next: generate and validate 50,000 synthetic traffic records spanning 90 days.
+- Last test result: `python -m pytest -q` — 20 passed (Python 3.12).

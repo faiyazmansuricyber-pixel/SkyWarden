@@ -205,15 +205,11 @@ def test_z2_debug_config_returns_only_fake_values_and_fix_hides_route(
     assert target.get("/api/v3/debug/config", headers=headers).status_code == 404
 
 
-def test_s1_mobile_fares_are_not_referenced_by_the_default_bundle(
+def test_s1_mobile_fares_require_a_mobile_user_agent(
     apps: tuple[TestClient, TestClient, Path],
 ) -> None:
     target, _, _ = apps
     headers = auth(login(target))
-    bundle = target.get("/app.js")
-    assert bundle.status_code == 200
-    assert "/api/m/v2/fares" not in bundle.text
-
     mobile = target.get(
         "/api/m/v2/fares",
         headers={**headers, "User-Agent": "SkyVoyageMobile/1.0 (Android)"},

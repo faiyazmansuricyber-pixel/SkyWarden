@@ -13,7 +13,6 @@ from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -178,6 +177,20 @@ def _validate_profile_update(update: ProfileUpdate) -> dict[str, str | None]:
     return values
 
 
+def _render_bundle(
+    release_version: str, flags: dict[str, bool]
+) -> tuple[str, str]:
+    contents = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    mobile_route = '"/api/m/v2/fares"' if flags["FIX_S1"] else "null"
+    invoice_route = (
+        '"/api/v3/bookings/{id}/invoice"' if release_version == "v3.1" else "null"
+    )
+    contents = contents.replace("__MOBILE_FARES_ROUTE__", mobile_route)
+    contents = contents.replace("__INVOICE_ROUTE__", invoice_route)
+    digest = hashlib.sha256(contents.encode("utf-8")).hexdigest()[:12]
+    return f"/app.{digest}.js", contents
+
+
 def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
     initialize_database(db_path)
     app = FastAPI(
@@ -233,12 +246,29 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
     user_dependency = Depends(authenticated_user)
 
     @app.get("/", include_in_schema=False)
-    def portal() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def portal(request: Request) -> Response:
+        bundle_path, _ = _render_bundle(
+            request.state.release_version, request.state.flags
+        )
+        contents = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        return Response(
+            content=contents.replace("__APP_BUNDLE_PATH__", bundle_path),
+            media_type="text/html",
+        )
 
-    @app.get("/app.js", include_in_schema=False)
-    def portal_script() -> FileResponse:
-        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript")
+    @app.get("/app.{bundle_hash}.js", include_in_schema=False)
+    def portal_script(bundle_hash: str, request: Request) -> Response:
+        bundle_path, contents = _render_bundle(
+            request.state.release_version, request.state.flags
+        )
+        expected_hash = bundle_path.removeprefix("/app.").removesuffix(".js")
+        if bundle_hash != expected_hash:
+            raise HTTPException(status_code=404, detail="Bundle not found.")
+        return Response(
+            content=contents,
+            media_type="text/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
 
     @app.post("/api/v3/auth/login")
     def login(payload: LoginRequest, response: Response) -> dict[str, str]:
