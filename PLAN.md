@@ -280,3 +280,5 @@ Do not touch other milestones.
 - M2 uses an explicit CLI/test provider for R2 approval; API/UI approval is added in M6/M7.
 - `FIX_B1`–`FIX_B5` close their bugs; `FIX_Z1` and `FIX_Z2` make their routes return 404; `FIX_S1` exposes the route in the web portal JavaScript bundle.
 - For M4, negative quantity and price tampering are R1; double refund is R2. One approval covers both replays of a plan. Each state-changing test creates a fresh booking with a test account. Only `scripts/reset.py` may reset the database; the agent must not.
+- M2 health uses a 100 ms latency baseline and evaluates its thresholds on a 20-response window; R2 CLI/test approval requires a `plan_id` and is cached per plan.
+- Until M5 creates triage ownership data, M3 inventory ownership mappings live in `engine/inventory/owners.yaml`.
