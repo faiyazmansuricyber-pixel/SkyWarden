@@ -282,3 +282,5 @@ Do not touch other milestones.
 - For M4, negative quantity and price tampering are R1; double refund is R2. One approval covers both replays of a plan. Each state-changing test creates a fresh booking with a test account. Only `scripts/reset.py` may reset the database; the agent must not.
 - M2 health uses a 100 ms latency baseline and evaluates its thresholds on a 20-response window; R2 CLI/test approval requires a `plan_id` and is cached per plan.
 - Until M5 creates triage ownership data, M3 inventory ownership mappings live in `engine/inventory/owners.yaml`.
+- M6's first API slice is read-only and exposes only the requested graph, inventory, and OpenAPI GET routes; it returns an explicit 503 when M3 artifacts are absent and never creates or seeds them. CORS is limited to localhost and 127.0.0.1 on Vite's port 5173.
+- Since the M3 endpoint schema has no flow field, M6 derives flow from the endpoint path; unrecognized paths are labelled `unknown` rather than supplied with UI fallback data.

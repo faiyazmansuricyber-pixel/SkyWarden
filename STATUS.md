@@ -1,12 +1,14 @@
 # SkyWarden status
 
-- Current milestone: M3 complete; M4 is next.
-- M0, M1A, M1B, M1C, M1b, M2, and M3 are complete.
-- M1B has flag-gated vulnerabilities, loopback admin controls, deploy/reset
-  scripts, and ground-truth tests. M1C serves a content-hashed JavaScript bundle;
-  M1b generates 50,000 synthetic access records across 90 days.
-- M2 adds the scoped safety gate, vault, token-bucket rate limits, health pause,
-  redacted append-only audit log, and cached CLI/test R2 approvals.
-- M3 adds gated role-based crawling and probing, redacted HAR capture, a SQLite
-  and NetworkX endpoint graph, active/zombie/shadow inventory, and OpenAPI output.
-- Last test result: `python -m pytest -q` — 29 passed (Python 3.12).
+- Current milestone: M6 API slice complete; M7a UI is next.
+- M0, M1A, M1B, M1C, M1b, M2, M3, and the M6 read-only API slice are complete.
+- M1B provides flag-gated vulnerabilities and local admin controls; M1C serves
+  the content-hashed portal bundle; M1b creates synthetic 90-day traffic.
+- M2 provides the scoped safety gate, vault, rate limits, health pause, redacted
+  audit log, and CLI/test R2 approvals.
+- M3 provides gated crawling/probing, redacted HAR, the SQLite/NetworkX graph,
+  active/zombie/shadow inventory, and OpenAPI generation.
+- M6 exposes read-only graph, inventory, and OpenAPI GET routes with local-only
+  dev CORS. M3 runtime artifacts are absent from this checkout; the API returns
+  503 until the recon pipeline generates them, without creating fallback data.
+- Last test result: `python -m pytest -q` — 31 passed (Python 3.12).
