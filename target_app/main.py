@@ -237,14 +237,8 @@ def create_app(db_path: Path = DEFAULT_DB_PATH) -> FastAPI:
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/app.js", include_in_schema=False)
-    def portal_script(request: Request) -> Response:
-        contents = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-        if request.state.flags["FIX_S1"]:
-            contents = contents.replace(
-                'const mobileFaresRoute = null;',
-                'const mobileFaresRoute = "/api/m/v2/fares";',
-            )
-        return Response(content=contents, media_type="text/javascript")
+    def portal_script() -> FileResponse:
+        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript")
 
     @app.post("/api/v3/auth/login")
     def login(payload: LoginRequest, response: Response) -> dict[str, str]:

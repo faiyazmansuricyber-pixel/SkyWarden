@@ -205,13 +205,14 @@ def test_z2_debug_config_returns_only_fake_values_and_fix_hides_route(
     assert target.get("/api/v3/debug/config", headers=headers).status_code == 404
 
 
-def test_s1_mobile_fares_and_fix_reference_are_flagged_dynamically(
+def test_s1_mobile_fares_are_not_referenced_by_the_default_bundle(
     apps: tuple[TestClient, TestClient, Path],
 ) -> None:
-    target, admin, _ = apps
+    target, _, _ = apps
     headers = auth(login(target))
-    bundle_off = target.get("/app.js")
-    assert "/api/m/v2/fares" not in bundle_off.text
+    bundle = target.get("/app.js")
+    assert bundle.status_code == 200
+    assert "/api/m/v2/fares" not in bundle.text
 
     mobile = target.get(
         "/api/m/v2/fares",
@@ -224,15 +225,6 @@ def test_s1_mobile_fares_and_fix_reference_are_flagged_dynamically(
         headers={**headers, "User-Agent": "SkyVoyageWeb/1.0"},
     )
     assert desktop.status_code == 404
-
-    set_flag(admin, "FIX_S1")
-    bundle_on = target.get("/app.js")
-    assert bundle_on.status_code == 200
-    assert "/api/m/v2/fares" in bundle_on.text
-    assert target.get(
-        "/api/m/v2/fares",
-        headers={**headers, "User-Agent": "SkyVoyageMobile/1.0 (Android)"},
-    ).status_code == 200
 
 
 def test_admin_control_app_rejects_non_loopback_clients(
