@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SkyVoyage demo portal</title>
+    <style>
+      body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 760px; padding: 0 1rem; }
+      fieldset { margin: 1rem 0; }
+      label { display: block; margin: .5rem 0; }
+      input { margin-left: .5rem; max-width: 20rem; }
+      button { margin: .25rem; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <h1>SkyVoyage demo portal</h1>
+    <p>Local synthetic travel demo. Sign in with a seeded test account.</p>
+    <fieldset>
+      <legend>Sign in</legend>
+      <label>Username <input id="username" autocomplete="username"></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password"></label>
+      <button id="login">Sign in</button>
+      <button id="profile">Load my profile</button>
+    </fieldset>
+    <fieldset>
+      <legend>Search flights</legend>
+      <label>Origin <input id="origin" maxlength="3"></label>
+      <label>Destination <input id="destination" maxlength="3"></label>
+      <button id="search">Search</button>
+    </fieldset>
+    <fieldset>
+      <legend>Create a booking</legend>
+      <label>Flight ID <input id="flight-id"></label>
+      <label>Quantity <input id="quantity" type="number" min="1" max="9" value="1"></label>
+      <label>Synthetic traveller name <input id="traveler-name" value="Synthetic Traveller Demo"></label>
+      <label>Synthetic passport number <input id="passport-number" value="X0000001"></label>
+      <button id="hold">Create hold</button>
+      <button id="book">Book (server-priced)</button>
+    </fieldset>
+    <fieldset>
+      <legend>Manage a booking</legend>
+      <label>Booking ID <input id="booking-id"></label>
+      <button id="booking">View booking</button>
+      <button id="pay">Pay</button>
+      <button id="cancel">Cancel</button>
+    </fieldset>
+    <pre id="output" aria-live="polite"></pre>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
