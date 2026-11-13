@@ -52,15 +52,32 @@ run `python -m scripts.recon` to crawl the seeded roles, probe the bounded local
 route patterns through the safety gate, and write the inventory database,
 redacted HAR files, and `data/openapi.json`.
 
-## Dashboard
+## How to see what we built
 
-Install the UI dependencies once with `Set-Location ui; npm ci`. With the M3
-inventory generated, start the read-only API in one terminal:
+Install the UI dependencies and Playwright's Chromium browser once:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 9000
+Set-Location ui
+npm ci
+Set-Location ..
+.\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
-In another terminal, run `.\scripts\start_ui.ps1` and open
-`http://127.0.0.1:5173`. If M3 artifacts are unavailable, the API reports that
-state explicitly; the dashboard never substitutes sample inventory.
+From the repository root, start the local demo:
+
+```powershell
+.\scripts\start_all.ps1
+```
+
+The script activates `.venv`, resets and reseeds synthetic SkyVoyage data,
+generates the 90-day traffic log, starts the target and dashboard API on
+loopback, runs recon through the safety gate, and starts the Vite UI. It prints:
+
+- Portal: `http://127.0.0.1:8001`
+- API docs: `http://127.0.0.1:9000/docs`
+- Dashboard: `http://127.0.0.1:5173`
+
+Stop only the processes started by the launcher with
+`.\scripts\stop_all.ps1`. Starting the demo resets the local synthetic target
+database and replaces its generated traffic log. No requests are sent outside
+the owned SkyVoyage app at `127.0.0.1:8001`.

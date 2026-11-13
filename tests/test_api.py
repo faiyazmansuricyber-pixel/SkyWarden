@@ -101,3 +101,20 @@ def test_api_reports_missing_m3_artifacts_without_creating_data(
     assert openapi_response.status_code == 503
     assert not database_path.exists()
     assert not openapi_path.exists()
+
+
+def test_api_exposes_swagger_docs_and_schema(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "knowledge.sqlite3", tmp_path / "openapi.json")
+
+    with TestClient(app) as client:
+        docs_response = client.get("/docs")
+        schema_response = client.get("/openapi.json")
+
+    assert docs_response.status_code == 200
+    assert "text/html" in docs_response.headers["content-type"]
+    assert schema_response.status_code == 200
+    assert set(schema_response.json()["paths"]) == {
+        "/api/graph",
+        "/api/inventory",
+        "/api/openapi",
+    }

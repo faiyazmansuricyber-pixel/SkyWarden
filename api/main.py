@@ -114,9 +114,9 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(
         title="SkyWarden dashboard API",
-        docs_url=None,
+        docs_url="/docs",
         redoc_url=None,
-        openapi_url=None,
+        openapi_url="/openapi.json",
     )
     app.add_middleware(
         CORSMiddleware,
