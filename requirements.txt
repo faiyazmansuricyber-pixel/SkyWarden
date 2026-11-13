@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+httpx
+pydantic
+networkx
+pytest
+playwright
+python-dotenv
+langgraph
