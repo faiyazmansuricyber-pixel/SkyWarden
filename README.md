@@ -51,3 +51,16 @@ With the SkyVoyage app running on `127.0.0.1:8001` and the access log generated,
 run `python -m scripts.recon` to crawl the seeded roles, probe the bounded local
 route patterns through the safety gate, and write the inventory database,
 redacted HAR files, and `data/openapi.json`.
+
+## Dashboard
+
+Install the UI dependencies once with `Set-Location ui; npm ci`. With the M3
+inventory generated, start the read-only API in one terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 9000
+```
+
+In another terminal, run `.\scripts\start_ui.ps1` and open
+`http://127.0.0.1:5173`. If M3 artifacts are unavailable, the API reports that
+state explicitly; the dashboard never substitutes sample inventory.

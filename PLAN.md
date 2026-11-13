@@ -284,3 +284,4 @@ Do not touch other milestones.
 - Until M5 creates triage ownership data, M3 inventory ownership mappings live in `engine/inventory/owners.yaml`.
 - M6's first API slice is read-only and exposes only the requested graph, inventory, and OpenAPI GET routes; it returns an explicit 503 when M3 artifacts are absent and never creates or seeds them. CORS is limited to localhost and 127.0.0.1 on Vite's port 5173.
 - Since the M3 endpoint schema has no flow field, M6 derives flow from the endpoint path; unrecognized paths are labelled `unknown` rather than supplied with UI fallback data.
+- M7a renders map and inventory data only from the read-only API; unimplemented timeline, safety, findings, and deploy panels remain visibly labelled placeholders and do not simulate activity.

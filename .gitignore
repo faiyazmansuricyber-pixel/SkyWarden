@@ -222,3 +222,5 @@ __marimo__/
 # SkyWarden generated and frontend files
 data/
 node_modules/
+!ui/src/lib/
+!ui/src/lib/**
